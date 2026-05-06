@@ -1,0 +1,67 @@
+services:
+  app:
+    build:
+      context: ./docker/php
+    container_name: shineray-app
+    volumes:
+      - ./src:/var/www/html
+    depends_on:
+      - db
+    networks:
+      - shineray
+
+  nginx:
+    image: nginx:alpine
+    container_name: shineray-nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./src:/var/www/html
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app
+    networks:
+      - shineray
+
+  db:
+    image: mysql:8.0
+    container_name: shineray-db
+    environment:
+      MYSQL_DATABASE: shineray
+      MYSQL_USER: shineray
+      MYSQL_PASSWORD: shineray
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3306:3306"
+    volumes:
+      - dbdata:/var/lib/mysql
+    networks:
+      - shineray
+
+  node:
+    image: node:20-alpine
+    container_name: shineray-node
+    working_dir: /var/www/html
+    volumes:
+      - ./src:/var/www/html
+    ports:
+      - "5173:5173"
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    networks:
+      - shineray
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: shineray-mailpit
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    networks:
+      - shineray
+
+networks:
+  shineray:
+    driver: bridge
+
+volumes:
+  dbdata:

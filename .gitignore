@@ -1,0 +1,50 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*~
+*.Zone.Identifier
+*:Zone.Identifier
+
+# IDE
+.idea/
+.vscode/
+.fleet/
+*.sublime-*
+
+# Claude / sessão local
+.claude/
+
+# === Laravel ===
+src/vendor/
+src/node_modules/
+src/.env
+src/.env.backup
+src/.env.production
+src/.phpunit.result.cache
+src/.phpunit.cache/
+src/auth.json
+
+# storage runtime (mantém .gitkeep e arquivos do disk public)
+src/storage/*.key
+src/storage/logs/*.log
+src/storage/framework/cache/data/
+src/storage/framework/sessions/*
+!src/storage/framework/sessions/.gitignore
+src/storage/framework/views/*
+!src/storage/framework/views/.gitignore
+src/storage/framework/testing/*
+!src/storage/framework/testing/.gitignore
+src/storage/debugbar/
+
+# bootstrap caches
+src/bootstrap/cache/*.php
+!src/bootstrap/cache/.gitignore
+
+# Symlink criado por `artisan storage:link` — recriar localmente
+src/public/storage
+
+# build artifacts
+src/public/build/
+src/public/hot
+src/public/mix-manifest.json
