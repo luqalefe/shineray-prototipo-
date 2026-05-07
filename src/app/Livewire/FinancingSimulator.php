@@ -6,6 +6,7 @@ use App\Models\Lead;
 use App\Models\Moto;
 use App\Models\SimulatorSetting;
 use App\Services\FinancingCalculator;
+use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
 
@@ -14,7 +15,7 @@ class FinancingSimulator extends Component
     public Moto $moto;
     public SimulatorSetting $settings;
 
-    public float $downPayment = 0;
+    public ?float $downPayment = 0;
     public int $installments = 24;
 
     public string $customerName = '';
@@ -23,6 +24,8 @@ class FinancingSimulator extends Component
 
     public bool $simulationCompleted = false;
     public ?int $savedLeadId = null;
+
+    public ?string $downPaymentNotice = null;
 
     public function mount(Moto $moto): void
     {
@@ -47,10 +50,56 @@ class FinancingSimulator extends Component
         return round((float) $this->moto->price * ((float) $this->settings->max_down_payment_percent / 100), 2);
     }
 
+    public function updatedDownPayment(mixed $value): void
+    {
+        $min = $this->minDownPayment;
+        $max = $this->maxDownPayment;
+        $fmt = fn (float $v) => 'R$ '.number_format($v, 2, ',', '.');
+
+        if ($value === null || (is_string($value) && trim($value) === '')) {
+            $this->downPayment = $min;
+            $this->downPaymentNotice = 'Entrada mínima preenchida automaticamente: '.$fmt($min).'.';
+            Log::info('Simulator downPayment empty — preenchido com mínimo', [
+                'moto_id' => $this->moto->id,
+                'min' => $min,
+            ]);
+
+            return;
+        }
+
+        $numeric = (float) $value;
+
+        if ($numeric < $min) {
+            $this->downPayment = $min;
+            $this->downPaymentNotice = 'Valor abaixo do mínimo. Ajustamos para a entrada mínima de '.$fmt($min).'.';
+            Log::info('Simulator downPayment abaixo do mínimo — ajustado', [
+                'moto_id' => $this->moto->id,
+                'attempted' => $numeric,
+                'min' => $min,
+            ]);
+
+            return;
+        }
+
+        if ($numeric > $max) {
+            $this->downPayment = $max;
+            $this->downPaymentNotice = 'Valor acima do máximo. Ajustamos para a entrada máxima de '.$fmt($max).'.';
+            Log::info('Simulator downPayment acima do máximo — ajustado', [
+                'moto_id' => $this->moto->id,
+                'attempted' => $numeric,
+                'max' => $max,
+            ]);
+
+            return;
+        }
+
+        $this->downPaymentNotice = null;
+    }
+
     #[Computed]
     public function financedAmount(): float
     {
-        return max(0.0, (float) $this->moto->price - (float) $this->downPayment);
+        return max(0.0, (float) $this->moto->price - (float) ($this->downPayment ?? 0));
     }
 
     #[Computed]
@@ -133,7 +182,7 @@ class FinancingSimulator extends Component
 
     public function resetSimulation(): void
     {
-        $this->reset(['simulationCompleted', 'savedLeadId', 'customerName', 'customerPhone', 'customerEmail']);
+        $this->reset(['simulationCompleted', 'savedLeadId', 'customerName', 'customerPhone', 'customerEmail', 'downPaymentNotice']);
         $this->downPayment = round((float) $this->moto->price * 0.20, 2);
         $this->installments = 24;
     }

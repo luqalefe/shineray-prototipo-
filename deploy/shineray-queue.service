@@ -1,0 +1,27 @@
+# /etc/systemd/system/shineray-queue.service
+# Worker da queue do Laravel (Redis)
+#
+# Instalação:
+#   sudo cp deploy/shineray-queue.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now shineray-queue
+#
+# O deploy.sh reinicia este service automaticamente se ele existir.
+
+[Unit]
+Description=Shineray Laravel queue worker
+After=network.target redis-server.service mysql.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+Restart=always
+RestartSec=5
+WorkingDirectory=/var/www/shineray/src
+ExecStart=/usr/bin/php /var/www/shineray/src/artisan queue:work redis --sleep=3 --tries=3 --max-time=3600
+StandardOutput=append:/var/log/shineray-queue.log
+StandardError=append:/var/log/shineray-queue.log
+
+[Install]
+WantedBy=multi-user.target

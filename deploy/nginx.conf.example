@@ -1,0 +1,44 @@
+# /etc/nginx/sites-available/shineray
+# Vhost de exemplo pra shineray.estevo.tech
+#
+# Passos:
+#   1) cp nginx.conf.example /etc/nginx/sites-available/shineray
+#   2) ln -s /etc/nginx/sites-available/shineray /etc/nginx/sites-enabled/shineray
+#   3) certbot --nginx -d shineray.estevo.tech    (gera HTTPS automaticamente)
+#   4) sudo bash deploy/setup-vps.sh
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name shineray.estevo.tech;
+
+    root /var/www/shineray/src/public;
+    index index.php index.html;
+
+    charset utf-8;
+    client_max_body_size 50M;
+
+    # Laravel front controller
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location = /favicon.ico { access_log off; log_not_found off; }
+    location = /robots.txt  { access_log off; log_not_found off; }
+
+    error_page 404 /index.php;
+
+    location ~ \.php$ {
+        fastcgi_pass unix:/var/run/php/php8.3-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        include fastcgi_params;
+    }
+
+    location ~ /\.(?!well-known).* {
+        deny all;
+    }
+
+    # Logs
+    access_log /var/log/nginx/shineray-access.log;
+    error_log  /var/log/nginx/shineray-error.log;
+}

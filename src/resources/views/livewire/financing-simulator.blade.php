@@ -21,10 +21,13 @@
                 <span class="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 text-sm font-semibold">R$</span>
                 <input type="number" step="100"
                        min="{{ $this->minDownPayment }}" max="{{ $this->maxDownPayment }}"
-                       wire:model.live.debounce.500ms="downPayment"
+                       wire:model.blur="downPayment"
                        class="w-full pl-10 pr-3 py-2.5 border border-ink-200 rounded-md text-ink-800 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
             </div>
-            <p class="text-xs text-ink-400 mt-1">Mínimo: R$ {{ number_format($this->minDownPayment, 2, ',', '.') }}</p>
+            <p class="text-xs text-ink-400 mt-1">Mínimo: R$ {{ number_format($this->minDownPayment, 2, ',', '.') }} — máximo: R$ {{ number_format($this->maxDownPayment, 2, ',', '.') }}</p>
+            @if($downPaymentNotice)
+                <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5 mt-2">{{ $downPaymentNotice }}</p>
+            @endif
             @error('downPayment') <p class="text-xs text-brand-500 mt-1">{{ $message }}</p> @enderror
         </div>
 
@@ -51,21 +54,27 @@
                     <p class="font-display text-lg font-bold text-ink-800 leading-none mt-1">R$ {{ number_format($this->financedAmount, 2, ',', '.') }}</p>
                 </div>
                 <div class="text-right">
-                    <p class="text-[10px] uppercase tracking-widest text-ink-400 font-semibold">Total a pagar</p>
-                    <p class="font-display text-lg font-bold text-ink-800 leading-none mt-1">R$ {{ number_format($this->calculation['total_amount'] + (float) $downPayment, 2, ',', '.') }}</p>
+                    <p class="text-[10px] uppercase tracking-widest text-ink-400 font-semibold">Em</p>
+                    <p class="font-display text-lg font-bold text-ink-800 leading-none mt-1">{{ $installments }}x</p>
                 </div>
             </div>
-            <div class="mt-4 pt-4 border-t border-ink-200">
+            <div class="mt-4 pt-4 border-t border-ink-200 text-center">
+                <div class="w-11 h-11 mx-auto bg-brand-500/10 rounded-full flex items-center justify-center mb-3">
+                    <svg class="w-5 h-5 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                    </svg>
+                </div>
                 <p class="text-[10px] uppercase tracking-widest text-ink-400 font-semibold">Sua parcela</p>
-                <p class="font-display text-4xl font-extrabold text-brand-500 leading-none mt-1">
-                    {{ $installments }}<span class="text-2xl">x</span> de R$ {{ number_format($this->calculation['installment_value'], 2, ',', '.') }}
+                <p class="font-display text-3xl font-bold text-ink-300 leading-none mt-1 select-none tracking-wider">
+                    {{ $installments }}x de R$ ••••,••
                 </p>
+                <p class="text-xs text-brand-500 mt-3 font-semibold">Preencha seus dados abaixo pra liberar a simulação</p>
                 <p class="text-[11px] text-ink-400 mt-3">{{ $settings->disclaimer_text }}</p>
             </div>
         </div>
 
         <form wire:submit="simulate" class="space-y-4 pt-4 border-t border-ink-100">
-            <h4 class="font-display text-lg font-bold uppercase text-ink-800">Para fechar, deixe seus dados</h4>
+            <h4 class="font-display text-lg font-bold uppercase text-ink-800">Pra ver sua parcela, deixe seus dados</h4>
 
             <div class="grid sm:grid-cols-2 gap-4">
                 <div class="sm:col-span-2">
@@ -88,7 +97,7 @@
 
             <button type="submit" wire:loading.attr="disabled" wire:target="simulate"
                     class="w-full bg-brand-500 hover:bg-brand-600 disabled:opacity-60 text-white font-semibold py-3 rounded-md transition shadow-md shadow-brand-500/20">
-                <span wire:loading.remove wire:target="simulate">Simular e falar com vendedor</span>
+                <span wire:loading.remove wire:target="simulate">Ver minha parcela e falar no WhatsApp</span>
                 <span wire:loading wire:target="simulate" class="inline-flex items-center gap-2">
                     <svg class="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
                         <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity="0.25" stroke-width="4"></circle>
@@ -113,7 +122,7 @@
 
         <div class="bg-ink-50 rounded-xl border border-ink-100 p-4 text-left text-sm space-y-1.5">
             <p><span class="text-ink-400">Modelo:</span> <strong>{{ $moto->name }}</strong></p>
-            <p><span class="text-ink-400">Entrada:</span> <strong>R$ {{ number_format((float) $downPayment, 2, ',', '.') }}</strong></p>
+            <p><span class="text-ink-400">Entrada:</span> <strong>R$ {{ number_format((float) ($downPayment ?? 0), 2, ',', '.') }}</strong></p>
             <p><span class="text-ink-400">Parcelas:</span> <strong>{{ $installments }}x de R$ {{ number_format($this->calculation['installment_value'], 2, ',', '.') }}</strong></p>
             <p><span class="text-ink-400">Total:</span> <strong>R$ {{ number_format($this->calculation['total_amount'] + (float) $downPayment, 2, ',', '.') }}</strong></p>
         </div>
