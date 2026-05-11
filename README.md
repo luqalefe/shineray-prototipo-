@@ -35,13 +35,20 @@ O fluxo de negócio é simples e típico de concessionária regional: o cliente 
 git clone <repo> shineray
 cd shineray
 
-# .env do Laravel (já versionado em src/.env neste protótipo)
+# .env do Laravel (vendor/, node_modules/ e src/.env são gitignored)
+cp src/.env.example src/.env
 
-# Builda imagem PHP custom (php:8.4-fpm + extensões pdo_mysql, gd, intl, zip, bcmath, opcache)
+# Builda imagem PHP custom (php:8.4-fpm-alpine + extensões pdo_mysql, gd, intl, zip, bcmath, opcache)
 docker compose build app
 
 # Sobe os 5 containers: app (php-fpm), nginx, db (mysql), node (vite), mailpit
 docker compose up -d
+
+# Instala dependências PHP dentro do container (vendor/ não é versionado)
+docker compose exec app composer install --no-interaction --prefer-dist --optimize-autoloader
+
+# Gera APP_KEY no .env
+docker compose exec app php artisan key:generate --force
 
 # Aguarda MySQL aceitar conexões e roda migrations
 docker compose exec app php artisan migrate --force
@@ -56,6 +63,10 @@ docker compose exec app php artisan tinker --execute="\App\Models\User::updateOr
 
 # Gera o symlink storage/app/public → public/storage para imagens das motos
 docker compose exec app php artisan storage:link
+
+# Copia as imagens originais das motos pra dentro do storage público
+# (o seeder grava só o caminho `motos/<slug>.webp`; o arquivo precisa existir no disco)
+mkdir -p src/storage/app/public/motos && cp assets/motos/* src/storage/app/public/motos/
 ```
 
 ### Endereços
@@ -214,12 +225,13 @@ Componente: `App\Livewire\MotoDetail` com route binding por slug (`Moto::getRout
 ### 4. Simulador de financiamento (Tabela Price)
 
 - Componente `App\Livewire\FinancingSimulator` com:
-  - Slider de **parcelas** (default 12-48x, step 6)
-  - Input de **entrada** (R$, %padrão 20%, mínimo 10%, máximo 80%)
-  - **Cálculo reativo** em tempo real (debounce 500ms) usando `App\Services\FinancingCalculator`
-  - Submit → salva como Lead com `source='simulador'` + todos os campos da simulação
-  - WhatsApp pré-formatado com mensagem rica (emojis + dados em markdown WhatsApp)
-  - Tracking de `whatsapp_clicked` via `wire:click` no botão final
+  - Slider **reativo** de parcelas (`wire:model.live="installments"`) — limites e step vêm de `simulator_settings`
+  - Input de **entrada** com auto-clamp: valor abaixo do mínimo ou acima do máximo é ajustado automaticamente e mostra um aviso amarelo (`downPaymentNotice`); campo vazio é preenchido com o mínimo. Tudo logado via `Log::info` pra auditoria.
+  - **Gate da parcela**: enquanto o cliente não preenche `nome + WhatsApp` e clica "Ver minha parcela", o valor da parcela aparece ofuscado (`R$ ••••,••`) com a copy "Preencha seus dados abaixo pra liberar a simulação". Só após `simulate()` (que valida + cria o Lead) o card de sucesso revela o valor real e libera o WhatsApp.
+  - Submit → salva como `Lead` com `source='simulador'` + todos os campos da simulação (`vehicle_price`, `down_payment`, `financed_amount`, `installments`, `interest_rate`, `installment_value`, `total_amount`)
+  - WhatsApp pré-formatado com mensagem rica (emojis + dados em markdown WhatsApp), gerado on-demand via `#[Computed] whatsappLink()`
+  - Tracking de `whatsapp_clicked` via `wire:click="trackWhatsappClick"` no botão final
+  - `resetSimulation()` permite refazer a simulação sem refresh da página
 
 **Fórmula** (Tabela Price):  PMT = PV × (i × (1+i)^n) / ((1+i)^n − 1). Cobertura de testes em `tests/Unit/FinancingCalculatorTest.php` (4 cenários: com juros, juros zero, input inválido, tabela de amortização).
 
@@ -352,9 +364,26 @@ Não há testes de Livewire/Filament neste protótipo. Recomendado em produção
 
 ---
 
+## Deploy em VPS
+
+A pasta `deploy/` tem os scripts prontos pra colocar o protótipo numa VPS Ubuntu/Debian (ex: `https://shineray.estevo.tech`):
+
+| Script | Pra quê |
+|---|---|
+| `deploy/setup-vps.sh` | **Primeira vez** — configura swap (2 GB), Redis, OPcache, PHP-FPM, Nginx e roda o primeiro deploy. **Idempotente**: detecta o que já está configurado e pula. |
+| `deploy/deploy.sh` | **Rotina** — `git pull` + `composer install` + `vite build` + `php artisan optimize` + `systemctl reload php-fpm`. |
+| `deploy/nginx.conf.example` | Vhost de exemplo pra `/etc/nginx/sites-available/shineray`. |
+| `deploy/shineray-queue.service` | Systemd unit pro queue worker (opcional). |
+
+Roteiro completo passo-a-passo (clone → DNS → Nginx → Certbot → setup-vps): **veja [`deploy/README.md`](deploy/README.md)**.
+
+> O `setup-vps.sh` força `CACHE_STORE=redis`, `SESSION_DRIVER=redis` e `QUEUE_CONNECTION=redis` no `.env` — isso invalida sessões existentes do `/admin`, todo mundo precisa logar de novo após o primeiro setup.
+
+---
+
 ## Caminho pra produção
 
-Checklist mínimo antes de deploy:
+Checklist mínimo antes de deploy (complementa o `deploy/README.md`):
 
 1. **`.env`**:
    - `APP_ENV=production`, `APP_DEBUG=false`
@@ -379,6 +408,17 @@ Checklist mínimo antes de deploy:
 - **Round-robin com 3 tiebreakers**: `last_assigned_at ASC` → `leads_count ASC` → `id ASC`. O segundo tiebreaker é necessário porque `timestamp` no MySQL tem resolução de 1s e múltiplos leads no mesmo segundo deixariam o sort indefinido.
 - **PeriodFilter centralizado**: `App\Support\PeriodFilter::range($period)` retorna `[$from, $to]`. Reusado por 4 widgets — sem duplicação de match/switch em cada widget.
 - **Fallback de e-mail**: se não houver vendedor ativo, lead vai pra `config('store.sales_email')`. Garantia de que **nenhum lead se perde**, mesmo com a equipe inteira "off".
+
+---
+
+## Documentação adicional
+
+| Arquivo | Conteúdo |
+|---|---|
+| [`deploy/README.md`](deploy/README.md) | Roteiro detalhado do deploy em VPS (clone, DNS, Nginx, Certbot, setup) |
+| [`docs/briefing-plano-vendas-produto.md`](docs/briefing-plano-vendas-produto.md) | Briefing de produto: posicionamento, ICP, jornada de compra e métricas que o painel admin reporta |
+| [`docs/briefing-roteiro-vendas.md`](docs/briefing-roteiro-vendas.md) | Roteiro de vendas / playbook pros vendedores que recebem leads do site |
+| [`src/README.md`](src/README.md) | README curto do app Laravel (estrutura interna do `src/`) |
 
 ---
 
